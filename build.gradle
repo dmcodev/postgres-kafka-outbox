@@ -1,15 +1,21 @@
 plugins {
-    id 'java'
+    id 'java-library'
+    id 'io.freefair.lombok' version '8.4'
 }
 
 group = 'dev.dmcode'
-version = '1.0-SNAPSHOT'
+version = '0.1-SNAPSHOT'
 
 repositories {
     mavenCentral()
 }
 
+ext {
+    slf4jVersion = '1.7.36'
+}
+
 dependencies {
+    api "org.slf4j:slf4j-api:$slf4jVersion"
     testImplementation platform('org.junit:junit-bom:5.9.1')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
