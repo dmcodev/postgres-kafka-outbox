@@ -9,9 +9,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static java.util.Objects.isNull;
-import static java.util.Objects.nonNull;
-
 public class SingleExecutor implements Executor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SingleExecutor.class);
@@ -31,36 +28,54 @@ public class SingleExecutor implements Executor {
     }
 
     @Override
-    public final void start() {
+    public final boolean start() {
+        boolean started = false;
         lock.lock();
         try {
-            if (isNull(thread)) {
+            if (thread == null) {
                 thread = new Thread(this::run);
                 thread.start();
+                started = true;
             }
         } finally {
             lock.unlock();
         }
+        return started;
     }
 
     @Override
-    public final void stop() {
+    public final boolean stop() {
+        Thread stoppedThread = null;
         lock.lock();
         try {
-            if (nonNull(thread)) {
+            if (thread != null) {
                 thread.interrupt();
+                stoppedThread = thread;
                 thread = null;
             }
         } finally {
             lock.unlock();
         }
+        if (stoppedThread == null) {
+            return false;
+        }
+        long joinMillis = configuration.threadTerminationTimeout().toMillis();
+        if (joinMillis > 0) {
+            try {
+                stoppedThread.join(joinMillis);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                LOGGER.error("Interrupted while awaiting thread termination", exception);
+            }
+        }
+        return !stoppedThread.isAlive();
     }
 
     @Override
     public final void wakeup() {
         lock.lock();
         try {
-            if (nonNull(thread)) {
+            if (thread != null) {
                 wakeupRequested = true;
                 wakeup.signal();
             }

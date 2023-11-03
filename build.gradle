@@ -1,5 +1,6 @@
 plugins {
     id 'java-library'
+    id 'groovy'
     id 'io.freefair.lombok' version '8.4'
 }
 
@@ -12,12 +13,14 @@ repositories {
 
 ext {
     slf4jVersion = '1.7.36'
+    spockVersion = '2.3-groovy-4.0'
 }
 
 dependencies {
     api "org.slf4j:slf4j-api:$slf4jVersion"
-    testImplementation platform('org.junit:junit-bom:5.9.1')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation "org.slf4j:slf4j-simple:$slf4jVersion"
+    testImplementation "org.spockframework:spock-core:$spockVersion"
 }
 
 test {

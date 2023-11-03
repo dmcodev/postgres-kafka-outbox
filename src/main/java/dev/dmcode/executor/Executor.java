@@ -2,9 +2,9 @@ package dev.dmcode.executor;
 
 public interface Executor {
 
-    void start();
+    boolean start();
 
-    void stop();
+    boolean stop();
 
     void wakeup();
 }

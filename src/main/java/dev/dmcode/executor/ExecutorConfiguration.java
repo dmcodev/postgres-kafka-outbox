@@ -9,11 +9,11 @@ import java.util.Objects;
 public record ExecutorConfiguration(
     Duration taskInterval,
     Duration onErrorPause,
-    Duration executorTerminationTimeout
+    Duration threadTerminationTimeout
 ) {
     private static final Duration DEFAULT_TASK_INTERVAL = Duration.ofSeconds(5);
     private static final Duration DEFAULT_ON_ERROR_PAUSE = DEFAULT_TASK_INTERVAL.dividedBy(2);
-    private static final Duration DEFAULT_EXECUTOR_TERMINATION_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration DEFAULT_THREAD_TERMINATION_TIMEOUT = Duration.ofSeconds(60);
 
     public ExecutorConfiguration {
         Objects.requireNonNull(taskInterval, "Task interval must be provided");
@@ -24,9 +24,9 @@ public record ExecutorConfiguration(
         if (onErrorPause.isNegative()) {
             throw new IllegalArgumentException("On error pause must not be negative");
         }
-        Objects.requireNonNull(executorTerminationTimeout, "Executor termination timeout must be provided");
-        if (executorTerminationTimeout.isNegative()) {
-            throw new IllegalArgumentException("Executor termination timeout must not be negative");
+        Objects.requireNonNull(threadTerminationTimeout, "Thread termination timeout must be provided");
+        if (threadTerminationTimeout.isNegative()) {
+            throw new IllegalArgumentException("Thread termination timeout must not be negative");
         }
     }
 
@@ -34,7 +34,7 @@ public record ExecutorConfiguration(
         return new ExecutorConfiguration(
             DEFAULT_TASK_INTERVAL,
             DEFAULT_ON_ERROR_PAUSE,
-            DEFAULT_EXECUTOR_TERMINATION_TIMEOUT
+            DEFAULT_THREAD_TERMINATION_TIMEOUT
         );
     }
 }
