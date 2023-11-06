@@ -9,7 +9,7 @@ DO $outbox$
                 "partition" INTEGER,
                 "timestamp" BIGINT,
                 "key" BYTEA,
-                "value" BYTEA NOT NULL,
+                "value" BYTEA,
                 "headers" BYTEA
             );
             CREATE FUNCTION "{SCHEMA_NAME}"."{NOTIFY_FUNCTION_NAME}"() RETURNS TRIGGER AS $function$
