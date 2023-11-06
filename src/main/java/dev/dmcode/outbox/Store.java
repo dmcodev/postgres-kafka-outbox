@@ -12,9 +12,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public class Store {
@@ -26,6 +29,10 @@ public class Store {
     private static final String SELECT_FOR_UPDATE_SQL_TEMPLATE = """
         SELECT "id", "topic", "partition", "timestamp", "key", "value", "headers" FROM "%s"."%s"
             ORDER BY "id" LIMIT %s FOR UPDATE SKIP LOCKED
+    """;
+    private static final int DELETE_BATCH_LIMIT = 1000;
+    private static final String DELETE_SQL_TEMPLATE = """
+        DELETE FROM "%s"."%s" WHERE "id" IN (%s)
     """;
 
     private final StoreConfiguration configuration;
@@ -90,6 +97,22 @@ public class Store {
                 records.add(deserialize(resultSet));
             }
             return records;
+        }
+    }
+
+    @SneakyThrows
+    void delete(Connection connection, Set<Long> keys) {
+        var pendingKeys = new HashSet<Object>(keys);
+        while (!pendingKeys.isEmpty()) {
+            var keysBatch = pendingKeys.stream().limit(DELETE_BATCH_LIMIT).collect(Collectors.toSet());
+            pendingKeys.removeAll(keysBatch);
+            var sqlKeySet = keysBatch.stream().map(Object::toString).collect(Collectors.joining(", "));
+            var deleteSql = DELETE_SQL_TEMPLATE.formatted(configuration.schemaName(), configuration.tableName(), sqlKeySet);
+            try (var statement = connection.prepareStatement(deleteSql)) {
+                if (statement.executeUpdate() != keysBatch.size()) {
+                    throw new IllegalStateException("Could not delete records: " + keysBatch);
+                }
+            }
         }
     }
 

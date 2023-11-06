@@ -124,8 +124,6 @@ class StoreSpec extends Specification {
                     fetchedBatches.add(batch)
                     clientsBarrier.await(10, TimeUnit.SECONDS)
                     connection.commit()
-                } catch (Exception exception) {
-                    exception.printStackTrace()
                 }
             }
         }
@@ -138,6 +136,44 @@ class StoreSpec extends Specification {
         cleanup:
         deleteSchema(storeConfiguration)
         executor.shutdownNow()
+    }
+
+    def "Should delete records"() {
+        given:
+        def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
+        def storeConfiguration = StoreConfiguration.createDefault()
+        def store = new Store(storeConfiguration, dataSource)
+        def connection = dataSource.getConnection()
+        store.initializeSchema()
+        6.times {
+            store.insert(record, record.key(), record.value())
+        }
+        when:
+        store.delete(connection, [1L, 3L, 5L].toSet())
+        then:
+        store.selectForUpdate(connection, 100).collect { it.id() }.toSet() == [2L, 4L, 6L].toSet()
+        cleanup:
+        deleteSchema(storeConfiguration)
+        connection.close()
+    }
+
+    def "Should delete large amount of records using batching"() {
+        given:
+        def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
+        def storeConfiguration = StoreConfiguration.createDefault()
+        def store = new Store(storeConfiguration, dataSource)
+        def connection = dataSource.getConnection()
+        store.initializeSchema()
+        1500.times {
+            store.insert(record, record.key(), record.value())
+        }
+        when:
+        store.delete(connection, (1L .. 1100).toSet())
+        then:
+        store.selectForUpdate(connection, 1000).collect { it.id() }.toSet() == (1101L .. 1500L).toSet()
+        cleanup:
+        deleteSchema(storeConfiguration)
+        connection.close()
     }
 
     HikariDataSource createDataSource() {
