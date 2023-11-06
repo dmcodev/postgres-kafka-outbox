@@ -1,8 +1,10 @@
 package dev.dmcode.outbox;
 
+import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.apache.kafka.clients.producer.ProducerRecord;
 
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+@RequiredArgsConstructor
 public class Store {
 
     private static final String SCHEMA_SCRIPT_LOCATION = "/dev/dmcode/outbox/outbox_ddl.sql";
@@ -26,17 +29,14 @@ public class Store {
     """;
 
     private final StoreConfiguration configuration;
+    private final DataSource dataSource;
 
-    public Store() {
-        this(StoreConfiguration.createDefault());
-    }
-
-    public Store(StoreConfiguration configuration) {
-        this.configuration = configuration;
+    public Store(DataSource dataSource) {
+        this(StoreConfiguration.createDefault(), dataSource);
     }
 
     @SneakyThrows
-    public void initializeSchema(Connection connection) {
+    public void initializeSchema() {
         var placeholders = Map.of(
             "SCHEMA_NAME", configuration.schemaName(),
             "TABLE_NAME", configuration.tableName(),
@@ -45,15 +45,21 @@ public class Store {
             "NOTIFICATION_CHANNEL_NAME", configuration.notificationChannelName()
         );
         var schemaScript = loadSchemaScript(placeholders);
-        try (var statement = connection.createStatement()) {
+        try (
+            var connection = dataSource.getConnection();
+            var statement = connection.createStatement()
+        ) {
             statement.execute(schemaScript);
         }
     }
 
     @SneakyThrows
-    long insert(ProducerRecord<?, ?> record, byte[] key, byte[] value, Connection connection) {
+    long insert(ProducerRecord<?, ?> record, byte[] key, byte[] value) {
         var insertSql = INSERT_SQL_TEMPLATE.formatted(configuration.schemaName(), configuration.tableName());
-        try (var statement = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)) {
+        try (
+            var connection = dataSource.getConnection();
+            var statement = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)
+        ) {
             statement.setString(1, record.topic());
             statement.setObject(2, record.partition());
             statement.setObject(3, record.timestamp());
@@ -73,7 +79,7 @@ public class Store {
     }
 
     @SneakyThrows
-    List<OutboxRecord> selectForUpdate(int limit, Connection connection) {
+    List<OutboxRecord> selectForUpdate(Connection connection, int limit) {
         var selectSql = SELECT_FOR_UPDATE_SQL_TEMPLATE.formatted(configuration.schemaName(), configuration.tableName(), limit);
         try (
             var statement = connection.prepareStatement(selectSql, Statement.RETURN_GENERATED_KEYS);
@@ -89,9 +95,9 @@ public class Store {
 
     private static OutboxRecord deserialize(ResultSet resultSet) throws SQLException {
         long id = resultSet.getLong(1);
-        String topic = resultSet.getString(2);
-        Integer partition = resultSet.getObject(3, Integer.class);
-        Long timestamp = resultSet.getObject(4, Long.class);
+        var topic = resultSet.getString(2);
+        var partition = resultSet.getObject(3, Integer.class);
+        var timestamp = resultSet.getObject(4, Long.class);
         var key = resultSet.getBytes(5);
         var value = resultSet.getBytes(6);
         var headersBytes = resultSet.getBytes(7);

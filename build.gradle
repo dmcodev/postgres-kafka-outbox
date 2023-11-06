@@ -17,6 +17,7 @@ ext {
     kafkaClientVersion = '3.2.3'
     spockVersion = '2.3-groovy-4.0'
     testContainersVersion = '1.17.5'
+    hikariCpVersion = '5.0.1'
 }
 
 dependencies {
@@ -29,6 +30,7 @@ dependencies {
     testImplementation "org.testcontainers:postgresql:$testContainersVersion"
     testImplementation "org.testcontainers:kafka:$testContainersVersion"
     testImplementation "org.testcontainers:spock:$testContainersVersion"
+    testImplementation "com.zaxxer:HikariCP:$hikariCpVersion"
 }
 
 test {

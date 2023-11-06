@@ -1,5 +1,7 @@
 package dev.dmcode.outbox
 
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.header.internals.RecordHeader
 import org.testcontainers.containers.PostgreSQLContainer
@@ -8,8 +10,6 @@ import spock.lang.Shared
 import spock.lang.Specification
 import spock.lang.Unroll
 
-import java.sql.Connection
-import java.sql.DriverManager
 import java.util.concurrent.*
 
 @Testcontainers
@@ -17,6 +17,18 @@ class StoreSpec extends Specification {
 
     @Shared
     PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:14.5-alpine")
+    @Shared
+    HikariDataSource dataSource
+
+    def setup() {
+        if (dataSource == null) {
+            dataSource = createDataSource()
+        }
+    }
+
+    def cleanupSpec() {
+        dataSource?.close()
+    }
 
     def "Should initialize schema once with multiple threads trying"() {
         given:
@@ -26,13 +38,13 @@ class StoreSpec extends Specification {
         def completionLatch = new CountDownLatch(numberOfThreads)
         def exceptions = new CopyOnWriteArrayList()
         def storeConfiguration = StoreConfiguration.createDefault()
-        def store = new Store(storeConfiguration)
+        def store = new Store(storeConfiguration, dataSource)
         when:
         numberOfThreads.times {
             executor.submit {
-                try (def connection = createJdbcConnection()) {
-                    startBarrier.await(5, TimeUnit.SECONDS)
-                    store.initializeSchema(connection)
+                startBarrier.await(5, TimeUnit.SECONDS)
+                try {
+                    store.initializeSchema()
                 } catch (Exception exception) {
                     exceptions.add(exception)
                 }
@@ -44,9 +56,7 @@ class StoreSpec extends Specification {
         completionLatch.await(5, TimeUnit.SECONDS)
         exceptions.empty
         cleanup:
-        try (def connection = createJdbcConnection()) {
-            deleteSchema(connection, storeConfiguration)
-        }
+        deleteSchema(storeConfiguration)
         executor.shutdownNow()
     }
 
@@ -54,15 +64,15 @@ class StoreSpec extends Specification {
     def "Should insert and fetch records"() {
         given:
         def storeConfiguration = StoreConfiguration.createDefault()
-        def store = new Store(storeConfiguration)
-        def connection = createJdbcConnection()
-        store.initializeSchema(connection)
+        def store = new Store(storeConfiguration, dataSource)
+        store.initializeSchema()
+        def connection = dataSource.getConnection()
         when:
-        long recordId = store.insert(RECORD, RECORD.key(), RECORD.value(), connection)
+        long recordId = store.insert(RECORD, RECORD.key(), RECORD.value())
         then:
         recordId == 1
         when:
-        def records = store.selectForUpdate(10, connection)
+        def records = store.selectForUpdate(connection, 10)
         then:
         records.size() == 1
         with(records.first()) {
@@ -77,8 +87,8 @@ class StoreSpec extends Specification {
             }
         }
         cleanup:
-        deleteSchema(connection, storeConfiguration)
         connection.close()
+        deleteSchema(storeConfiguration)
         where:
         RECORD << [
             new ProducerRecord<byte[], byte[]>("T", "V".bytes),
@@ -90,12 +100,61 @@ class StoreSpec extends Specification {
         ]
     }
 
-    Connection createJdbcConnection() {
-        DriverManager.getConnection(postgres.jdbcUrl, postgres.username, postgres.password)
+    def "Should select for update"() {
+        given:
+        int numberOfRecords = 10
+        int numberOfClients = 4
+        int batchSize = 3
+        def executor = Executors.newCachedThreadPool()
+        def clientsBarrier = new CyclicBarrier(numberOfClients + 1)
+        def fetchedBatches = new CopyOnWriteArrayList<List<Long>>()
+        def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
+        def storeConfiguration = StoreConfiguration.createDefault()
+        def store = new Store(storeConfiguration, dataSource)
+        store.initializeSchema()
+        numberOfRecords.times {
+            store.insert(record, record.key(), record.value())
+        }
+        when:
+        numberOfClients.times {
+            executor.execute {
+                try (def connection = dataSource.getConnection()) {
+                    connection.setAutoCommit(false)
+                    def batch = store.selectForUpdate(connection, batchSize).collect { it.id() }
+                    fetchedBatches.add(batch)
+                    clientsBarrier.await(10, TimeUnit.SECONDS)
+                    connection.commit()
+                } catch (Exception exception) {
+                    exception.printStackTrace()
+                }
+            }
+        }
+        clientsBarrier.await(10, TimeUnit.SECONDS)
+        then:
+        fetchedBatches.size() == numberOfClients
+        fetchedBatches.findAll { it.size() == batchSize }.size() == numberOfRecords.intdiv(batchSize)
+        fetchedBatches.findAll { it.size() == (numberOfRecords % batchSize) }.size() == 1
+        fetchedBatches.flatten().toSet() == (1 .. 10).toSet()
+        cleanup:
+        deleteSchema(storeConfiguration)
+        executor.shutdownNow()
     }
 
-    void deleteSchema(Connection connection, StoreConfiguration configuration) {
-        try (var statement = connection.createStatement()) {
+    HikariDataSource createDataSource() {
+        def config = new HikariConfig().tap {
+            setJdbcUrl(postgres.jdbcUrl)
+            setUsername(postgres.username)
+            setPassword(postgres.password)
+            setMaximumPoolSize(100)
+        }
+        new HikariDataSource(config)
+    }
+
+    void deleteSchema(StoreConfiguration configuration) {
+        try (
+            def connection = dataSource.getConnection()
+            def statement = connection.createStatement()
+        ) {
             statement.execute("DROP TRIGGER \"${configuration.notifyTriggerName()}\" ON \"${configuration.schemaName()}\".\"${configuration.tableName()}\"")
             statement.execute("DROP FUNCTION \"${configuration.schemaName()}\".\"${configuration.notifyFunctionName()}\"")
             statement.execute("DROP TABLE \"${configuration.schemaName()}\".\"${configuration.tableName()}\"")
