@@ -11,6 +11,7 @@ import spock.lang.Specification
 import spock.lang.Unroll
 
 import java.util.concurrent.*
+import java.util.stream.Stream
 
 @Testcontainers
 class StoreSpec extends Specification {
@@ -20,10 +21,8 @@ class StoreSpec extends Specification {
     @Shared
     HikariDataSource dataSource
 
-    def setup() {
-        if (dataSource == null) {
-            dataSource = createDataSource()
-        }
+    def setupSpec() {
+        dataSource = createDataSource()
     }
 
     def cleanupSpec() {
@@ -68,15 +67,16 @@ class StoreSpec extends Specification {
         store.initializeSchema()
         def connection = dataSource.getConnection()
         when:
-        long recordId = store.insert(RECORD, RECORD.key(), RECORD.value())
+        def recordIds = store.insert([RECORD])
         then:
-        recordId == 1
+        recordIds.size() == 1
+        recordIds.first() == 1
         when:
         def records = store.selectForUpdate(connection, 10)
         then:
         records.size() == 1
         with(records.first()) {
-            id() == recordId
+            id() == 1
             with(record()) {
                 topic() == RECORD.topic()
                 partition() == RECORD.partition()
@@ -100,6 +100,26 @@ class StoreSpec extends Specification {
         ]
     }
 
+    @Unroll
+    def "Should insert large number of records using batching"() {
+        given:
+        def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
+        def records = Stream.generate { record }.limit(NUMBER_OF_RECORDS).toList()
+        def storeConfiguration = StoreConfiguration.createDefault()
+        def store = new Store(storeConfiguration, dataSource)
+        def connection = dataSource.getConnection()
+        store.initializeSchema()
+        when:
+        store.insert(records)
+        then:
+        store.selectForUpdate(connection, NUMBER_OF_RECORDS).collect { it.id() }.toSet() == (1L .. NUMBER_OF_RECORDS).toSet()
+        cleanup:
+        deleteSchema(storeConfiguration)
+        connection.close()
+        where:
+        NUMBER_OF_RECORDS << [500, 1234]
+    }
+
     def "Should select for update"() {
         given:
         int numberOfRecords = 10
@@ -109,12 +129,11 @@ class StoreSpec extends Specification {
         def clientsBarrier = new CyclicBarrier(numberOfClients + 1)
         def fetchedBatches = new CopyOnWriteArrayList<List<Long>>()
         def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
+        def records = Stream.generate { record }.limit(numberOfRecords).toList()
         def storeConfiguration = StoreConfiguration.createDefault()
         def store = new Store(storeConfiguration, dataSource)
         store.initializeSchema()
-        numberOfRecords.times {
-            store.insert(record, record.key(), record.value())
-        }
+        store.insert(records)
         when:
         numberOfClients.times {
             executor.execute {
@@ -141,13 +160,12 @@ class StoreSpec extends Specification {
     def "Should delete records"() {
         given:
         def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
+        def records = Stream.generate { record }.limit(6).toList()
         def storeConfiguration = StoreConfiguration.createDefault()
         def store = new Store(storeConfiguration, dataSource)
         def connection = dataSource.getConnection()
         store.initializeSchema()
-        6.times {
-            store.insert(record, record.key(), record.value())
-        }
+        store.insert(records)
         when:
         store.delete(connection, [1L, 3L, 5L].toSet())
         then:
@@ -164,9 +182,8 @@ class StoreSpec extends Specification {
         def store = new Store(storeConfiguration, dataSource)
         def connection = dataSource.getConnection()
         store.initializeSchema()
-        1500.times {
-            store.insert(record, record.key(), record.value())
-        }
+        def records = Stream.generate { record }.limit(1500).toList()
+        store.insert(records)
         when:
         store.delete(connection, (1L .. 1100).toSet())
         then:

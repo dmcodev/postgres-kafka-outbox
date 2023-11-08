@@ -8,6 +8,7 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -18,18 +19,21 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @RequiredArgsConstructor
 public class Store {
 
     private static final String SCHEMA_SCRIPT_LOCATION = "/dev/dmcode/outbox/outbox_ddl.sql";
+    private static final String INSERT_PLACEHOLDERS_CLAUSE = "(?, ?, ?, ?, ?, ?)";
     private static final String INSERT_SQL_TEMPLATE = """
-        INSERT INTO "%s"."%s" ("topic", "partition", "timestamp", "key", "value", "headers") VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO "%s"."%s" ("topic", "partition", "timestamp", "key", "value", "headers") VALUES %s
     """;
     private static final String SELECT_FOR_UPDATE_SQL_TEMPLATE = """
         SELECT "id", "topic", "partition", "timestamp", "key", "value", "headers" FROM "%s"."%s"
             ORDER BY "id" LIMIT %s FOR UPDATE SKIP LOCKED
     """;
+    private static final int INSERT_BATCH_LIMIT = 100;
     private static final int DELETE_BATCH_LIMIT = 1000;
     private static final String DELETE_SQL_TEMPLATE = """
         DELETE FROM "%s"."%s" WHERE "id" IN (%s)
@@ -61,27 +65,32 @@ public class Store {
     }
 
     @SneakyThrows
-    long insert(ProducerRecord<?, ?> record, byte[] key, byte[] value) {
-        var insertSql = INSERT_SQL_TEMPLATE.formatted(configuration.schemaName(), configuration.tableName());
-        try (
-            var connection = dataSource.getConnection();
-            var statement = connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS)
-        ) {
-            statement.setString(1, record.topic());
-            statement.setObject(2, record.partition());
-            statement.setObject(3, record.timestamp());
-            statement.setBytes(4, key);
-            statement.setBytes(5, value);
-            statement.setBytes(6, HeadersCodec.serialize(record.headers()));
-            if (statement.executeUpdate() != 1) {
-                throw new IllegalStateException("Could not insert record");
-            }
-            try (var generatedKeys = statement.getGeneratedKeys()) {
-                if (!generatedKeys.next()) {
-                    throw new IllegalStateException("Could not retrieve inserted record key");
+    List<Long> insert(List<ProducerRecord<byte[], byte[]>> records) {
+        int insertedRecords = 0;
+        var keys = new ArrayList<Long>(records.size());
+        try (var connection = dataSource.getConnection()) {
+            PreparedStatement batchStatement = null;
+            while (insertedRecords < records.size()) {
+                int remainingToInsert = records.size() - insertedRecords;
+                if (remainingToInsert >= INSERT_BATCH_LIMIT) {
+                    if (batchStatement == null) {
+                        batchStatement = createInsertStatement(connection, INSERT_BATCH_LIMIT);
+                    }
+                    batchStatement.clearParameters();
+                    insertedRecords = insertBatch(records, INSERT_BATCH_LIMIT, insertedRecords, batchStatement, keys);
+                } else {
+                    try (var remainingStatement = createInsertStatement(connection, remainingToInsert)) {
+                        insertedRecords = insertBatch(records, remainingToInsert, insertedRecords, remainingStatement, keys);
+                    }
                 }
-                return generatedKeys.getLong(1);
             }
+            if (batchStatement != null) {
+                batchStatement.close();
+            }
+            if (keys.size() != records.size()) {
+                throw new IllegalStateException("Could not insert all requested records: " + records);
+            }
+            return keys;
         }
     }
 
@@ -110,20 +119,54 @@ public class Store {
             var deleteSql = DELETE_SQL_TEMPLATE.formatted(configuration.schemaName(), configuration.tableName(), sqlKeySet);
             try (var statement = connection.prepareStatement(deleteSql)) {
                 if (statement.executeUpdate() != keysBatch.size()) {
-                    throw new IllegalStateException("Could not delete records: " + keysBatch);
+                    throw new IllegalStateException("Could not delete all requested records: " + keysBatch);
                 }
             }
         }
     }
 
+    private static int insertBatch(
+        List<ProducerRecord<byte[], byte[]>> records,
+        int batchSize,
+        int insertedRecords,
+        PreparedStatement statement,
+        ArrayList<Long> keys
+    ) throws SQLException {
+        int column = 1;
+        for (int i = 0; i < batchSize; i++) {
+            var record = records.get(insertedRecords++);
+            statement.setString(column++, record.topic());
+            statement.setObject(column++, record.partition());
+            statement.setObject(column++, record.timestamp());
+            statement.setBytes(column++, record.key());
+            statement.setBytes(column++, record.value());
+            statement.setBytes(column++, HeadersCodec.serialize(record.headers()));
+        }
+        statement.execute();
+        try (var resultSet = statement.getGeneratedKeys()) {
+            while (resultSet.next()) {
+                keys.add(resultSet.getLong(1));
+            }
+        }
+        return insertedRecords;
+    }
+
+    @SuppressWarnings("SqlSourceToSinkFlow")
+    private PreparedStatement createInsertStatement(Connection connection, int batchSize) throws SQLException{
+        var placeholdersClauseSql = Stream.generate(() -> INSERT_PLACEHOLDERS_CLAUSE).limit(batchSize).collect(Collectors.joining(", "));
+        var insertSql = INSERT_SQL_TEMPLATE.formatted(configuration.schemaName(), configuration.tableName(), placeholdersClauseSql);
+        return connection.prepareStatement(insertSql, Statement.RETURN_GENERATED_KEYS);
+    }
+
     private static OutboxRecord deserialize(ResultSet resultSet) throws SQLException {
-        long id = resultSet.getLong(1);
-        var topic = resultSet.getString(2);
-        var partition = resultSet.getObject(3, Integer.class);
-        var timestamp = resultSet.getObject(4, Long.class);
-        var key = resultSet.getBytes(5);
-        var value = resultSet.getBytes(6);
-        var headersBytes = resultSet.getBytes(7);
+        int column = 1;
+        long id = resultSet.getLong(column++);
+        var topic = resultSet.getString(column++);
+        var partition = resultSet.getObject(column++, Integer.class);
+        var timestamp = resultSet.getObject(column++, Long.class);
+        var key = resultSet.getBytes(column++);
+        var value = resultSet.getBytes(column++);
+        var headersBytes = resultSet.getBytes(column);
         var record = new ProducerRecord<>(topic, partition, timestamp, key, value);
         var headers = HeadersCodec.deserialize(headersBytes);
         if (headers != null) {
