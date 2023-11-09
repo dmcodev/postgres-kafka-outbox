@@ -8,7 +8,6 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.sql.DataSource;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -24,12 +23,11 @@ class DeliveryTask implements Task {
 
     private final DeliveryConfiguration configuration;
     private final Store store;
-    private final DataSource dataSource;
     private final Producer<byte[], byte[]> producer;
 
     @Override
     public TaskResult run() throws Exception {
-        try (var connection = dataSource.getConnection()) {
+        try (var connection = store.getConnection()) {
             connection.setAutoCommit(false);
             var records = store.selectForUpdate(connection, configuration.batchSize());
             if (records.isEmpty()) {
@@ -59,7 +57,7 @@ class DeliveryTask implements Task {
         if (exception != null) {
             LOGGER.error("Could not deliver record with ID {}", recordId, exception);
         } else {
-            LOGGER.debug("Record with ID {} delivered: {}", recordId, metadata);
+            LOGGER.debug("Record with ID {} delivered to: {}", recordId, metadata);
         }
     }
 

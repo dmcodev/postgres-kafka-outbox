@@ -14,7 +14,7 @@ class SingleExecutorSpec extends Specification {
             taskLatch.countDown()
             TaskResult.AWAIT
         } as Task
-        def configuration = ExecutorConfiguration.createDefault()
+        def configuration = ExecutorConfiguration.defaults()
         def executor = new SingleExecutor(task, configuration)
         when:
         boolean started = executor.start()
@@ -28,7 +28,7 @@ class SingleExecutorSpec extends Specification {
     def "Should start only once"() {
         given:
         def task = { TaskResult.AWAIT } as Task
-        def configuration = ExecutorConfiguration.createDefault()
+        def configuration = ExecutorConfiguration.defaults()
         def executor = new SingleExecutor(task, configuration)
         expect:
         executor.start()
@@ -40,7 +40,7 @@ class SingleExecutorSpec extends Specification {
     def "Should stop only once"() {
         given:
         def task = { TaskResult.AWAIT } as Task
-        def configuration = ExecutorConfiguration.createDefault()
+        def configuration = ExecutorConfiguration.defaults()
         def executor = new SingleExecutor(task, configuration)
         expect:
         executor.start()
@@ -56,7 +56,7 @@ class SingleExecutorSpec extends Specification {
             taskLatch.countDown()
             TaskResult.AWAIT
         } as Task
-        def configuration = ExecutorConfiguration.createDefault()
+        def configuration = ExecutorConfiguration.defaults()
         def executor = new SingleExecutor(task, configuration)
         when:
         executor.start()
@@ -75,7 +75,7 @@ class SingleExecutorSpec extends Specification {
             taskLatch.countDown()
             TaskResult.AWAIT
         } as Task
-        def configuration = ExecutorConfiguration.createDefault()
+        def configuration = ExecutorConfiguration.defaults()
         def executor = new SingleExecutor(task, configuration)
         when:
         executor.start()

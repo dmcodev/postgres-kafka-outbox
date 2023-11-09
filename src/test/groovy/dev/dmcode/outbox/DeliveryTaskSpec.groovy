@@ -9,7 +9,6 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.header.internals.RecordHeader
 import spock.lang.Specification
 
-import javax.sql.DataSource
 import java.sql.Connection
 import java.time.Duration
 import java.util.concurrent.CompletableFuture
@@ -18,16 +17,15 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class DeliveryTaskSpec extends Specification {
 
-    private static final DELIVERY_CONFIGURATION = DeliveryConfiguration.createDefault()
+    private static final DELIVERY_CONFIGURATION = DeliveryConfiguration.defaults()
         .withBatchSize(3)
         .withBatchTimeout(Duration.ofMillis(500))
 
     def store = Mock(Store)
     def connection = Mock(Connection)
-    def dataSource = Mock(DataSource)
     def producer = Mock(Producer)
 
-    def deliveryTask = new DeliveryTask(DELIVERY_CONFIGURATION, store, dataSource, producer)
+    def deliveryTask = new DeliveryTask(DELIVERY_CONFIGURATION, store, producer)
 
     def "Should deliver records batch"() {
         given:
@@ -38,7 +36,7 @@ class DeliveryTaskSpec extends Specification {
         then:
         result == TaskResult.CONTINUE
         and:
-        1 * dataSource.getConnection() >> connection
+        1 * store.getConnection() >> connection
         1 * connection.setAutoCommit(false)
         1 * store.selectForUpdate(connection, 3) >> records
         3 * producer.send(producerRecord, _) >> {
@@ -61,7 +59,7 @@ class DeliveryTaskSpec extends Specification {
         then:
         result == TaskResult.AWAIT
         and:
-        1 * dataSource.getConnection() >> connection
+        1 * store.getConnection() >> connection
         1 * connection.setAutoCommit(false)
         1 * store.selectForUpdate(connection, 3) >> records
         1 * producer.send(producerRecord, _) >> {
@@ -89,7 +87,7 @@ class DeliveryTaskSpec extends Specification {
         then:
         result == TaskResult.AWAIT
         and:
-        1 * dataSource.getConnection() >> connection
+        1 * store.getConnection() >> connection
         1 * connection.setAutoCommit(false)
         1 * store.selectForUpdate(connection, 3) >> records
         2 * producer.send(producerRecord, _) >> {
@@ -114,7 +112,7 @@ class DeliveryTaskSpec extends Specification {
         then:
         result == TaskResult.AWAIT
         and:
-        1 * dataSource.getConnection() >> connection
+        1 * store.getConnection() >> connection
         1 * connection.setAutoCommit(false)
         1 * store.selectForUpdate(connection, 3) >> records
         2 * producer.send(producerRecord, _) >> {

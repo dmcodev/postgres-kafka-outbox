@@ -16,6 +16,8 @@ ext {
     postgresDriverVersion = '42.3.8'
     kafkaClientVersion = '3.2.3'
     spockVersion = '2.3-groovy-4.0'
+    byteBuddyVersion = '1.14.9'
+    objenesisVersion = '3.3'
     testContainersVersion = '1.17.5'
     hikariCpVersion = '5.0.1'
 }
@@ -30,6 +32,8 @@ dependencies {
     testImplementation "org.testcontainers:postgresql:$testContainersVersion"
     testImplementation "org.testcontainers:kafka:$testContainersVersion"
     testImplementation "org.testcontainers:spock:$testContainersVersion"
+    testImplementation "net.bytebuddy:byte-buddy:$byteBuddyVersion"
+    testImplementation "org.objenesis:objenesis:$objenesisVersion"
     testImplementation "com.zaxxer:HikariCP:$hikariCpVersion"
 }
 

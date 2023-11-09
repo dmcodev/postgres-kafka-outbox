@@ -30,7 +30,7 @@ public record ExecutorConfiguration(
         }
     }
 
-    public static ExecutorConfiguration createDefault() {
+    public static ExecutorConfiguration defaults() {
         return new ExecutorConfiguration(
             DEFAULT_TASK_INTERVAL,
             DEFAULT_ON_ERROR_PAUSE,

@@ -23,7 +23,7 @@ public record DeliveryConfiguration(
         }
     }
 
-    public static DeliveryConfiguration createDefault() {
+    public static DeliveryConfiguration defaults() {
         return new DeliveryConfiguration(
             DEFAULT_BATCH_SIZE,
             DEFAULT_BATCH_TIMEOUT

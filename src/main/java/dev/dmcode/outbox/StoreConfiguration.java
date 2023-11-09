@@ -30,7 +30,7 @@ public record StoreConfiguration(
         return String.format("%s_%s", schemaName(), notificationChannelName());
     }
 
-    public static StoreConfiguration createDefault() {
+    public static StoreConfiguration defaults() {
         return new StoreConfiguration(
             DEFAULT_SCHEMA_NAME,
             DEFAULT_TABLE_NAME,

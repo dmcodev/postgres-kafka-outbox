@@ -26,7 +26,7 @@ class StoreSpec extends Specification {
     }
 
     def cleanupSpec() {
-        dataSource?.close()
+        dataSource.close()
     }
 
     def "Should initialize schema once with multiple threads trying"() {
@@ -36,7 +36,7 @@ class StoreSpec extends Specification {
         def startBarrier = new CyclicBarrier(numberOfThreads + 1)
         def completionLatch = new CountDownLatch(numberOfThreads)
         def exceptions = new CopyOnWriteArrayList()
-        def storeConfiguration = StoreConfiguration.createDefault()
+        def storeConfiguration = StoreConfiguration.defaults()
         def store = new Store(storeConfiguration, dataSource)
         when:
         numberOfThreads.times {
@@ -62,7 +62,7 @@ class StoreSpec extends Specification {
     @Unroll
     def "Should insert and fetch records"() {
         given:
-        def storeConfiguration = StoreConfiguration.createDefault()
+        def storeConfiguration = StoreConfiguration.defaults()
         def store = new Store(storeConfiguration, dataSource)
         store.initializeSchema()
         def connection = dataSource.getConnection()
@@ -105,7 +105,7 @@ class StoreSpec extends Specification {
         given:
         def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
         def records = Stream.generate { record }.limit(NUMBER_OF_RECORDS).toList()
-        def storeConfiguration = StoreConfiguration.createDefault()
+        def storeConfiguration = StoreConfiguration.defaults()
         def store = new Store(storeConfiguration, dataSource)
         def connection = dataSource.getConnection()
         store.initializeSchema()
@@ -130,7 +130,7 @@ class StoreSpec extends Specification {
         def fetchedBatches = new CopyOnWriteArrayList<List<Long>>()
         def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
         def records = Stream.generate { record }.limit(numberOfRecords).toList()
-        def storeConfiguration = StoreConfiguration.createDefault()
+        def storeConfiguration = StoreConfiguration.defaults()
         def store = new Store(storeConfiguration, dataSource)
         store.initializeSchema()
         store.insert(records)
@@ -161,7 +161,7 @@ class StoreSpec extends Specification {
         given:
         def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
         def records = Stream.generate { record }.limit(6).toList()
-        def storeConfiguration = StoreConfiguration.createDefault()
+        def storeConfiguration = StoreConfiguration.defaults()
         def store = new Store(storeConfiguration, dataSource)
         def connection = dataSource.getConnection()
         store.initializeSchema()
@@ -178,7 +178,7 @@ class StoreSpec extends Specification {
     def "Should delete large amount of records using batching"() {
         given:
         def record = new ProducerRecord<byte[], byte[]>("T", "V".bytes)
-        def storeConfiguration = StoreConfiguration.createDefault()
+        def storeConfiguration = StoreConfiguration.defaults()
         def store = new Store(storeConfiguration, dataSource)
         def connection = dataSource.getConnection()
         store.initializeSchema()

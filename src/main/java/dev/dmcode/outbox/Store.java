@@ -43,7 +43,7 @@ public class Store {
     private final DataSource dataSource;
 
     public Store(DataSource dataSource) {
-        this(StoreConfiguration.createDefault(), dataSource);
+        this(StoreConfiguration.defaults(), dataSource);
     }
 
     @SneakyThrows
@@ -123,6 +123,10 @@ public class Store {
                 }
             }
         }
+    }
+
+    Connection getConnection() throws SQLException {
+        return dataSource.getConnection();
     }
 
     private static int insertBatch(

@@ -10,7 +10,7 @@ class ExecutorConfigurationSpec extends Specification {
     @Unroll
     def "Should reject null values"() {
         when:
-        ExecutorConfiguration.createDefault()
+        ExecutorConfiguration.defaults()
             .invokeMethod(METHOD, null)
         then:
         def thrown = thrown(NullPointerException)
@@ -25,7 +25,7 @@ class ExecutorConfigurationSpec extends Specification {
     @Unroll
     def "Should reject negative durations"() {
         when:
-        ExecutorConfiguration.createDefault()
+        ExecutorConfiguration.defaults()
             .invokeMethod(METHOD, Duration.ofMillis(1).negated())
         then:
         def thrown = thrown(IllegalArgumentException)
