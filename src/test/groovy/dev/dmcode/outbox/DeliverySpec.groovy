@@ -38,8 +38,9 @@ class DeliverySpec extends Specification {
         dataSource.close()
     }
 
-    def "Should deliver record"() {
+    def "Should deliver single record"() {
         given:
+        def topicName = UUID.randomUUID().toString()
         def deliveryConfiguration = DeliveryConfiguration.defaults()
         def storeConfiguration = StoreConfiguration.defaults()
         def executorConfiguration = ExecutorConfiguration.defaults()
@@ -49,19 +50,49 @@ class DeliverySpec extends Specification {
         def deliveryTask = new DeliveryTask(deliveryConfiguration, store, kafkaProducer)
         def deliveryExecutor = new SingleExecutor(deliveryTask, executorConfiguration)
         def outboxProducer = new KafkaOutboxProducer(store, new StringSerializer(), new StringSerializer())
-        def kafkaTopic = new KafkaTopic<String, String>(kafka.bootstrapServers, "test", new StringDeserializer(), new StringDeserializer())
+        def kafkaTopic = new KafkaTopic<String, String>(kafka.bootstrapServers, topicName, new StringDeserializer(), new StringDeserializer())
         and:
         store.initializeSchema()
         deliveryExecutor.start()
         when:
-        outboxProducer.send(new ProducerRecord("test", "K", "V"))
+        outboxProducer.send(new ProducerRecord(topicName, "K", "V"))
         def deliveredRecords = kafkaTopic.poll(1)
         then:
-        deliveredRecords.size() == 1
         deliveredRecords["K"].value() == "V"
         cleanup:
         deliveryExecutor.stop()
         kafkaProducer.close()
+        kafkaTopic.close()
+    }
+
+    def "Should deliver records with multiple delivery executors"() {
+        given:
+        def topicName = UUID.randomUUID().toString()
+        def records = (1 .. 1000).collect { new ProducerRecord(topicName, "K_" + it, "V_" + it) }
+        def deliveryConfiguration = DeliveryConfiguration.defaults()
+            .withBatchSize(5)
+        def storeConfiguration = StoreConfiguration.defaults()
+        def executorConfiguration = ExecutorConfiguration.defaults()
+            .withTaskInterval(Duration.ofMillis(250))
+        def store = new Store(storeConfiguration, dataSource)
+        def kafkaProducers = (1 .. 4).collect { createKafkaProducer() }
+        def deliveryExecutors = (1 .. 4).collect {
+            def deliveryTask = new DeliveryTask(deliveryConfiguration, store, kafkaProducers[it - 1])
+            new SingleExecutor(deliveryTask, executorConfiguration)
+        }
+        def outboxProducer = new KafkaOutboxProducer(store, new StringSerializer(), new StringSerializer())
+        def kafkaTopic = new KafkaTopic<String, String>(kafka.bootstrapServers, topicName, new StringDeserializer(), new StringDeserializer())
+        and:
+        store.initializeSchema()
+        deliveryExecutors.forEach { it.start() }
+        when:
+        outboxProducer.send(records)
+        def deliveredRecords = kafkaTopic.poll(1000)
+        then:
+        deliveredRecords.keySet() == (1 .. 1000).collect { "K_" + it }.toSet()
+        cleanup:
+        deliveryExecutors.forEach { it.stop() }
+        kafkaProducers.forEach { it.close() }
         kafkaTopic.close()
     }
 
