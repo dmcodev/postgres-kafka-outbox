@@ -24,17 +24,19 @@ ext {
 
 dependencies {
     api "org.slf4j:slf4j-api:$slf4jVersion"
-    api "org.postgresql:postgresql:$postgresDriverVersion"
-    api "org.apache.kafka:kafka-clients:$kafkaClientVersion"
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    testRuntimeOnly "org.slf4j:slf4j-simple:$slf4jVersion"
+    compileOnly "org.postgresql:postgresql:$postgresDriverVersion"
+    compileOnly "org.apache.kafka:kafka-clients:$kafkaClientVersion"
     testImplementation "org.spockframework:spock-core:$spockVersion"
     testImplementation "org.testcontainers:postgresql:$testContainersVersion"
     testImplementation "org.testcontainers:kafka:$testContainersVersion"
     testImplementation "org.testcontainers:spock:$testContainersVersion"
-    testImplementation "net.bytebuddy:byte-buddy:$byteBuddyVersion"
-    testImplementation "org.objenesis:objenesis:$objenesisVersion"
     testImplementation "com.zaxxer:HikariCP:$hikariCpVersion"
+    testImplementation "org.postgresql:postgresql:$postgresDriverVersion"
+    testImplementation "org.apache.kafka:kafka-clients:$kafkaClientVersion"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly "org.slf4j:slf4j-simple:$slf4jVersion"
+    testRuntimeOnly "net.bytebuddy:byte-buddy:$byteBuddyVersion"
+    testRuntimeOnly "org.objenesis:objenesis:$objenesisVersion"
 }
 
 test {

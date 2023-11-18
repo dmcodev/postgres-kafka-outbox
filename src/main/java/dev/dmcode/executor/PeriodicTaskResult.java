@@ -1,6 +1,6 @@
 package dev.dmcode.executor;
 
-public enum TaskResult {
+public enum PeriodicTaskResult {
     CONTINUE,
     AWAIT
 }

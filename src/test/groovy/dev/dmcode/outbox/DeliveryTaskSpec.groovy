@@ -1,6 +1,6 @@
 package dev.dmcode.outbox
 
-import dev.dmcode.executor.TaskResult
+import dev.dmcode.executor.PeriodicTaskResult
 import org.apache.kafka.clients.producer.Callback
 import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -32,9 +32,9 @@ class DeliveryTaskSpec extends Specification {
         def producerRecord = new ProducerRecord<byte[], byte[]>("topic", 10, 100, "K".bytes, "V".bytes, [new RecordHeader("HK", "HV".bytes)])
         def records = (1 .. 3).collect { id -> new OutboxRecord(id, producerRecord) }
         when:
-        def result = deliveryTask.run()
+        def result = deliveryTask.runNext()
         then:
-        result == TaskResult.CONTINUE
+        result == PeriodicTaskResult.CONTINUE
         and:
         1 * store.getConnection() >> connection
         1 * connection.setAutoCommit(false)
@@ -55,9 +55,9 @@ class DeliveryTaskSpec extends Specification {
         def producerRecord = new ProducerRecord<byte[], byte[]>("topic", 10, 100, "K".bytes, "V".bytes, [new RecordHeader("HK", "HV".bytes)])
         def records = (1 .. 2).collect { id -> new OutboxRecord(id, producerRecord) }
         when:
-        def result = deliveryTask.run()
+        def result = deliveryTask.runNext()
         then:
-        result == TaskResult.AWAIT
+        result == PeriodicTaskResult.AWAIT
         and:
         1 * store.getConnection() >> connection
         1 * connection.setAutoCommit(false)
@@ -83,9 +83,9 @@ class DeliveryTaskSpec extends Specification {
         def producerRecord = new ProducerRecord<byte[], byte[]>("topic", 10, 100, "K".bytes, "V".bytes, [new RecordHeader("HK", "HV".bytes)])
         def records = (1 .. 2).collect { id -> new OutboxRecord(id, producerRecord) }
         when:
-        def result = deliveryTask.run()
+        def result = deliveryTask.runNext()
         then:
-        result == TaskResult.AWAIT
+        result == PeriodicTaskResult.AWAIT
         and:
         1 * store.getConnection() >> connection
         1 * connection.setAutoCommit(false)
@@ -108,9 +108,9 @@ class DeliveryTaskSpec extends Specification {
         def executor = Executors.newCachedThreadPool()
         def recordSequence = new AtomicInteger()
         when:
-        def result = deliveryTask.run()
+        def result = deliveryTask.runNext()
         then:
-        result == TaskResult.AWAIT
+        result == PeriodicTaskResult.AWAIT
         and:
         1 * store.getConnection() >> connection
         1 * connection.setAutoCommit(false)

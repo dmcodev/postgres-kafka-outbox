@@ -5,17 +5,17 @@ import spock.lang.Specification
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-class SingleExecutorSpec extends Specification {
+class SinglePeriodicTaskExecutorSpec extends Specification {
 
     def "Should start, run task and stop"() {
         given:
         def taskLatch = new CountDownLatch(1)
         def task = {
             taskLatch.countDown()
-            TaskResult.AWAIT
-        } as Task
-        def configuration = ExecutorConfiguration.defaults()
-        def executor = new SingleExecutor(task, configuration)
+            PeriodicTaskResult.AWAIT
+        } as PeriodicTask
+        def configuration = PeriodicTaskExecutorConfiguration.defaults()
+        def executor = new SinglePeriodicTaskExecutor(task, configuration)
         when:
         boolean started = executor.start()
         taskLatch.await(5, TimeUnit.SECONDS)
@@ -27,9 +27,9 @@ class SingleExecutorSpec extends Specification {
 
     def "Should start only once"() {
         given:
-        def task = { TaskResult.AWAIT } as Task
-        def configuration = ExecutorConfiguration.defaults()
-        def executor = new SingleExecutor(task, configuration)
+        def task = { PeriodicTaskResult.AWAIT } as PeriodicTask
+        def configuration = PeriodicTaskExecutorConfiguration.defaults()
+        def executor = new SinglePeriodicTaskExecutor(task, configuration)
         expect:
         executor.start()
         !executor.start()
@@ -39,9 +39,9 @@ class SingleExecutorSpec extends Specification {
 
     def "Should stop only once"() {
         given:
-        def task = { TaskResult.AWAIT } as Task
-        def configuration = ExecutorConfiguration.defaults()
-        def executor = new SingleExecutor(task, configuration)
+        def task = { PeriodicTaskResult.AWAIT } as PeriodicTask
+        def configuration = PeriodicTaskExecutorConfiguration.defaults()
+        def executor = new SinglePeriodicTaskExecutor(task, configuration)
         expect:
         executor.start()
         !executor.start()
@@ -54,10 +54,10 @@ class SingleExecutorSpec extends Specification {
         def taskLatch = new CountDownLatch(2)
         def task = {
             taskLatch.countDown()
-            TaskResult.AWAIT
-        } as Task
-        def configuration = ExecutorConfiguration.defaults()
-        def executor = new SingleExecutor(task, configuration)
+            PeriodicTaskResult.AWAIT
+        } as PeriodicTask
+        def configuration = PeriodicTaskExecutorConfiguration.defaults()
+        def executor = new SinglePeriodicTaskExecutor(task, configuration)
         when:
         executor.start()
         then:
@@ -73,10 +73,10 @@ class SingleExecutorSpec extends Specification {
         def task = {
             taskStartedLatch.countDown()
             taskLatch.countDown()
-            TaskResult.AWAIT
-        } as Task
-        def configuration = ExecutorConfiguration.defaults()
-        def executor = new SingleExecutor(task, configuration)
+            PeriodicTaskResult.AWAIT
+        } as PeriodicTask
+        def configuration = PeriodicTaskExecutorConfiguration.defaults()
+        def executor = new SinglePeriodicTaskExecutor(task, configuration)
         when:
         executor.start()
         taskStartedLatch.await(5, TimeUnit.SECONDS)

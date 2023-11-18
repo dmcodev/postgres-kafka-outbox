@@ -2,8 +2,8 @@ package dev.dmcode.outbox
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import dev.dmcode.executor.ExecutorConfiguration
-import dev.dmcode.executor.SingleExecutor
+import dev.dmcode.executor.PeriodicTaskExecutorConfiguration
+import dev.dmcode.executor.SinglePeriodicTaskExecutor
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.clients.producer.ProducerRecord
@@ -43,12 +43,12 @@ class DeliverySpec extends Specification {
         def topicName = UUID.randomUUID().toString()
         def deliveryConfiguration = DeliveryConfiguration.defaults()
         def storeConfiguration = StoreConfiguration.defaults()
-        def executorConfiguration = ExecutorConfiguration.defaults()
-            .withTaskInterval(Duration.ofMillis(250))
+        def executorConfiguration = PeriodicTaskExecutorConfiguration.defaults()
+            .withExecutionInterval(Duration.ofMillis(250))
         def store = new Store(storeConfiguration, dataSource)
         def kafkaProducer = createKafkaProducer()
         def deliveryTask = new DeliveryTask(deliveryConfiguration, store, kafkaProducer)
-        def deliveryExecutor = new SingleExecutor(deliveryTask, executorConfiguration)
+        def deliveryExecutor = new SinglePeriodicTaskExecutor(deliveryTask, executorConfiguration)
         def outboxProducer = new KafkaOutboxProducer(store, new StringSerializer(), new StringSerializer())
         def kafkaTopic = new KafkaTopic<String, String>(kafka.bootstrapServers, topicName, new StringDeserializer(), new StringDeserializer())
         and:
@@ -72,13 +72,13 @@ class DeliverySpec extends Specification {
         def deliveryConfiguration = DeliveryConfiguration.defaults()
             .withBatchSize(5)
         def storeConfiguration = StoreConfiguration.defaults()
-        def executorConfiguration = ExecutorConfiguration.defaults()
-            .withTaskInterval(Duration.ofMillis(250))
+        def executorConfiguration = PeriodicTaskExecutorConfiguration.defaults()
+            .withExecutionInterval(Duration.ofMillis(250))
         def store = new Store(storeConfiguration, dataSource)
         def kafkaProducers = (1 .. 4).collect { createKafkaProducer() }
         def deliveryExecutors = (1 .. 4).collect {
             def deliveryTask = new DeliveryTask(deliveryConfiguration, store, kafkaProducers[it - 1])
-            new SingleExecutor(deliveryTask, executorConfiguration)
+            new SinglePeriodicTaskExecutor(deliveryTask, executorConfiguration)
         }
         def outboxProducer = new KafkaOutboxProducer(store, new StringSerializer(), new StringSerializer())
         def kafkaTopic = new KafkaTopic<String, String>(kafka.bootstrapServers, topicName, new StringDeserializer(), new StringDeserializer())

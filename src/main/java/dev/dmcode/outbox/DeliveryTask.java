@@ -1,7 +1,7 @@
 package dev.dmcode.outbox;
 
-import dev.dmcode.executor.Task;
-import dev.dmcode.executor.TaskResult;
+import dev.dmcode.executor.PeriodicTask;
+import dev.dmcode.executor.PeriodicTaskResult;
 import lombok.RequiredArgsConstructor;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -17,7 +17,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
-class DeliveryTask implements Task {
+class DeliveryTask implements PeriodicTask {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DeliveryTask.class);
 
@@ -26,12 +26,12 @@ class DeliveryTask implements Task {
     private final Producer<byte[], byte[]> producer;
 
     @Override
-    public TaskResult run() throws Exception {
+    public PeriodicTaskResult runNext() throws Exception {
         try (var connection = store.getConnection()) {
             connection.setAutoCommit(false);
             var records = store.selectForUpdate(connection, configuration.batchSize());
             if (records.isEmpty()) {
-                return TaskResult.AWAIT;
+                return PeriodicTaskResult.AWAIT;
             }
             var deliveryResults = records.stream()
                 .map(this::deliverRecord)
@@ -41,7 +41,7 @@ class DeliveryTask implements Task {
                 store.delete(connection, deliveredRecordIds);
                 connection.commit();
             }
-            return deliveredRecordIds.size() == configuration.batchSize() ? TaskResult.CONTINUE : TaskResult.AWAIT;
+            return deliveredRecordIds.size() == configuration.batchSize() ? PeriodicTaskResult.CONTINUE : PeriodicTaskResult.AWAIT;
         }
     }
 

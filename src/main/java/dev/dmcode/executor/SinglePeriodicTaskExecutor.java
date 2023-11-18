@@ -9,22 +9,22 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class SingleExecutor implements Executor {
+public class SinglePeriodicTaskExecutor implements PeriodicTaskExecutor {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(SingleExecutor.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SinglePeriodicTaskExecutor.class);
 
     private final Lock lock = new ReentrantLock();
     private final Condition wakeup = lock.newCondition();
 
-    private final Task task;
-    private final ExecutorConfiguration configuration;
+    private final PeriodicTask task;
+    private final PeriodicTaskExecutorConfiguration configuration;
 
     private Thread thread;
     private boolean wakeupRequested;
 
-    public SingleExecutor(Task task, ExecutorConfiguration configuration) {
+    public SinglePeriodicTaskExecutor(PeriodicTask task, PeriodicTaskExecutorConfiguration configuration) {
         this.task = Objects.requireNonNull(task, "Task must be provided");
-        this.configuration = Objects.requireNonNull(configuration, "Executor configuration must be provided");
+        this.configuration = Objects.requireNonNull(configuration, "Configuration must be provided");
     }
 
     @Override
@@ -87,8 +87,8 @@ public class SingleExecutor implements Executor {
     private void run() {
         while (notInterrupted()) {
             try {
-                var taskResult = task.run();
-                if (taskResult == TaskResult.AWAIT) {
+                var taskResult = task.runNext();
+                if (taskResult == PeriodicTaskResult.AWAIT) {
                     await();
                 }
             } catch (InterruptedException exception) {
@@ -98,11 +98,16 @@ public class SingleExecutor implements Executor {
                 pauseOnError();
             }
         }
+        try {
+            task.onStop();
+        } catch (Exception exception) {
+            LOGGER.error("On stop callback exception", exception);
+        }
     }
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
     private void await() {
-        long awaitMillis = configuration.taskInterval().toMillis();
+        long awaitMillis = configuration.executionInterval().toMillis();
         lock.lock();
         try {
             if (notInterrupted() && !wakeupRequested && awaitMillis > 0) {
@@ -117,7 +122,7 @@ public class SingleExecutor implements Executor {
     }
 
     private void pauseOnError() {
-        long awaitMillis = configuration.onErrorPause().toMillis();
+        long awaitMillis = configuration.onErrorPauseDuration().toMillis();
         if (notInterrupted() && awaitMillis > 0) {
             try {
                 Thread.sleep(awaitMillis);

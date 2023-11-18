@@ -1,6 +1,6 @@
 package dev.dmcode.executor;
 
-public interface Executor {
+public interface PeriodicTaskExecutor {
 
     boolean start();
 
