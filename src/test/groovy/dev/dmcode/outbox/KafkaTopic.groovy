@@ -32,7 +32,7 @@ class KafkaTopic<K, V> implements AutoCloseable {
     }
 
     Map<K, ConsumerRecord<K, V>> poll(int size) {
-        Stream.generate { records.poll(10, TimeUnit.SECONDS) }
+        Stream.generate { records.poll(30, TimeUnit.SECONDS) }
             .limit(size)
             .collect(Collectors.toMap({ it.key() }, { it }))
     }

@@ -96,6 +96,40 @@ class DeliverySpec extends Specification {
         kafkaTopic.close()
     }
 
+    def "Should deliver with notifications enabled"() {
+        given:
+        def topicName = UUID.randomUUID().toString()
+        def deliveryConfiguration = DeliveryConfiguration.defaults()
+        def storeConfiguration = StoreConfiguration.defaults()
+        def executorConfiguration = PeriodicTaskExecutorConfiguration.defaults()
+            .withExecutionInterval(Duration.ofDays(100))
+        def store = new Store(storeConfiguration, dataSource)
+        def kafkaProducer = createKafkaProducer()
+        def deliveryTask = new DeliveryTask(deliveryConfiguration, store, kafkaProducer)
+        def deliveryExecutor = new SinglePeriodicTaskExecutor(deliveryTask, executorConfiguration)
+        def notificationTask = new NotificationTask(dataSource, deliveryExecutor, storeConfiguration.qualifiedNotificationChannelName(), Duration.ofMillis(250))
+        def notificationExecutor = new SinglePeriodicTaskExecutor(notificationTask, executorConfiguration)
+        def outboxProducer = new KafkaOutboxProducer(store, new StringSerializer(), new StringSerializer())
+        def kafkaTopic = new KafkaTopic<String, String>(kafka.bootstrapServers, topicName, new StringDeserializer(), new StringDeserializer())
+        and:
+        store.initializeSchema()
+        deliveryExecutor.start()
+        notificationExecutor.start()
+        when:
+        10.times {
+            outboxProducer.send(new ProducerRecord(topicName, "K_" + it, "V_" + it))
+            Thread.sleep(100)
+        }
+        def deliveredRecords = kafkaTopic.poll(10)
+        then:
+        deliveredRecords.keySet() == (0 .. 9).collect { "K_" + it }.toSet()
+        cleanup:
+        notificationExecutor.stop()
+        deliveryExecutor.stop()
+        kafkaProducer.close()
+        kafkaTopic.close()
+    }
+
 
     HikariDataSource createDataSource() {
         def config = new HikariConfig().tap {
